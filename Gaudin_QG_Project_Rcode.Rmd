@@ -333,3 +333,135 @@ pheno_1_ids
 dat_for_pheno_1
 
 ```
+
+
+```{r}
+SNP_info <- read.csv("data_files/SNP_info.csv", 
+    header = TRUE)
+```
+
+```{r}
+
+p_table_with_chrom_number$chromosome <- SNP_info$chromosome
+
+p_table_with_chrom_number$pheno_1 <- p_value_table[1,]
+
+p_table_with_chrom_number$pheno_2 <- p_value_table[2,]
+
+p_table_with_chrom_number$pheno_3 <- p_value_table[3,]
+```
+
+```{r}
+#library(ggplot2)
+SNPs <- c(1:N_SNPs)
+neg_log_ps <- -log10(p_table_with_chrom_number$pheno_1)
+chromosomes <- factor(p_table_with_chrom_number$chromosome)
+df <- data.frame(SNPs,neg_log_ps,p_table_with_chrom_number$chromosome)
+ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered Genotype") + ggtitle("Manhattan Plot") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
+```
+
+
+
+
+```{r}
+#SNPs <- c(1:N_SNPs)
+neg_log_ps <- -log10(p_table_with_chrom_number$pheno_2)
+#chromosomes <- factor(p_table_with_chrom_number$chromosome)
+df <- data.frame(SNPs,neg_log_ps,p_table_with_chrom_number$chromosome)
+ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered Genotype") + ggtitle("Manhattan Plot") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
+
+```
+
+
+```{r}
+
+neg_log_ps <- -log10(p_table_with_chrom_number$pheno_3)
+#chromosomes <- factor(p_table_with_chrom_number$chromosome)
+df <- data.frame(SNPs,neg_log_ps,p_table_with_chrom_number$chromosome)
+ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered Genotype") + ggtitle("Manhattan Plot") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
+
+```
+
+```{r}
+which(p_value_table[1,] == min(p_value_table[1,]))
+
+```
+```{r}
+> column_names[16784]
+#[1] "rs7726445"
+> column_names[16786]
+#[1] "rs7731592"
+> column_names[16791]
+#[1] "rs2161548"
+```
+
+```{r}
+new_pheno_1_most_sig <- c("rs7726445", "rs7731592", "rs2161548")
+
+new_pheno_1_ids <- getENSG(new_pheno_1_most_sig, mart.snp)[,2];
+
+dat_for_new_pheno_1 = getBM(
+  values = c(new_pheno_1_ids),
+  filters = c("ensembl_gene_id"),
+  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
+  mart = mart
+)
+
+new_pheno_1_ids
+dat_for_new_pheno_1
+
+```
+
+```{r}
+which(p_value_table[2,] == min(p_value_table[2,]))
+```
+
+```{r}
+column_names[19286]
+column_names[19288]
+```
+
+```{r}
+new_pheno_2_most_sig <- c("rs1129187", "rs10948061")
+
+new_pheno_2_ids <- getENSG(new_pheno_2_most_sig, mart.snp)[,2];
+
+dat_for_new_pheno_2 = getBM(
+  values = c(new_pheno_2_ids),
+  filters = c("ensembl_gene_id"),
+  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
+  mart = mart
+)
+
+new_pheno_2_ids
+dat_for_new_pheno_2
+
+```
+
+```{r}
+which(p_value_table[3,] == min(p_value_table[3,]))
+```
+
+
+```{r}
+column_names[41938]
+column_names[41942]
+column_names[41944]
+```
+
+```{r}
+new_pheno_3_most_sig <- c("rs11644748", "rs140254902", "rs9652776")
+
+new_pheno_3_ids <- getENSG(new_pheno_3_most_sig, mart.snp)[,2];
+
+dat_for_new_pheno_3 = getBM(
+  values = c(new_pheno_3_ids),
+  filters = c("ensembl_gene_id"),
+  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
+  mart = mart
+)
+
+new_pheno_3_ids
+dat_for_new_pheno_3
+
+```
