@@ -199,16 +199,16 @@ create_qq <- function(pvals){
 
 ```{r}
 
-qq_1 <- create_qq(p_value_table[1,]) + labs(y = "Computed PVals", x = "")
+qq_1 <- create_qq(p_value_table[1,]) + labs(y = "Computed -log10(PVals)", x = "")
 qq_2 <- create_qq(p_value_table[2,]) + labs(y = "", x = "")
-qq_3 <- create_qq(p_value_table[3,]) + labs(y = "", x = "Theor. Pvals")
+qq_3 <- create_qq(p_value_table[3,]) + labs(y = "", x = "Theor. -log10(Pvals)")
 qq_4 <- create_qq(p_value_table[4,]) + labs(y = "", x = "")
 qq_5 <- create_qq(p_value_table[5,]) + labs(y = "", x = "")
 
 
 ```
 
-```{r fig.height = 1, fig.width=5}
+```{r fig.height = 2, fig.width=10}
 library(ggpubr)
 theme_set(theme_pubr())
 
@@ -222,14 +222,14 @@ qq_plots_no_cov
 
 
 ```{r}
-qq_1_cov <- create_qq(p_value_cov_table[1,]) + labs(y = "Computed PVals", x = "")
+qq_1_cov <- create_qq(p_value_cov_table[1,]) + labs(y = "Computed -log10(PVals)", x = "")
 qq_2_cov <- create_qq(p_value_cov_table[2,]) + labs(y = "", x = "")
-qq_3_cov <- create_qq(p_value_cov_table[3,]) + labs(y = "", x = "Theor. Pvals")
+qq_3_cov <- create_qq(p_value_cov_table[3,]) + labs(y = "", x = "Theor. -log10(PVals)")
 qq_4_cov <- create_qq(p_value_cov_table[4,]) + labs(y = "", x = "")
 qq_5_cov <- create_qq(p_value_cov_table[5,]) + labs(y = "", x = "")
 ```
 
-```{r fig.height = 1, fig.width=5}
+```{r fig.height = 2, fig.width=10}
 
 qq_plots_with_cov <- ggarrange(qq_1_cov, qq_2_cov, qq_3_cov, qq_4_cov, qq_5_cov,
                     labels = c("1", "2", "3", "4", "5"),
@@ -240,6 +240,27 @@ qq_plots_with_cov
 
 ```{r}
 BF_correction_value <- 0.05/N_SNPs #1e-06
+
+```
+
+```{r}
+sum(p_value_table[1,] < BF_correction_value)
+sum(p_value_table[2,] < BF_correction_value)
+sum(p_value_table[3,] < BF_correction_value)
+sum(p_value_table[4,] < BF_correction_value)
+sum(p_value_table[5,] < BF_correction_value)
+
+```
+
+```{r}
+sum(p_value_cov_table[1,] < BF_correction_value)
+sum(p_value_cov_table[2,] < BF_correction_value)
+sum(p_value_cov_table[3,] < BF_correction_value)
+sum(p_value_cov_table[4,] < BF_correction_value)
+sum(p_value_cov_table[5,] < BF_correction_value)
+```
+
+```{r}
 
 column_names <- colnames(genotypes_table)
 
@@ -341,14 +362,15 @@ SNP_info <- read.csv("data_files/SNP_info.csv",
 ```
 
 ```{r}
+p_table_with_chrom_number <- data.frame(chromosome = SNP_info$chromosome, pheno_1 = p_value_table[1,], pheno_2 = p_value_table[2,], pheno_3 = p_value_table[3,])
 
-p_table_with_chrom_number$chromosome <- SNP_info$chromosome
+#p_table_with_chrom_number$chromosome <- SNP_info$chromosome
 
-p_table_with_chrom_number$pheno_1 <- p_value_table[1,]
+#p_table_with_chrom_number$pheno_1 <- p_value_table[1,]
 
-p_table_with_chrom_number$pheno_2 <- p_value_table[2,]
+#p_table_with_chrom_number$pheno_2 <- p_value_table[2,]
 
-p_table_with_chrom_number$pheno_3 <- p_value_table[3,]
+#p_table_with_chrom_number$pheno_3 <- p_value_table[3,]
 ```
 
 ```{r}
@@ -357,7 +379,23 @@ SNPs <- c(1:N_SNPs)
 neg_log_ps <- -log10(p_table_with_chrom_number$pheno_1)
 chromosomes <- factor(p_table_with_chrom_number$chromosome)
 df <- data.frame(SNPs,neg_log_ps,p_table_with_chrom_number$chromosome)
-ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered Genotype") + ggtitle("Manhattan Plot") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
+pheno_1_manhattan_full <- ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P values for Phenotype 1") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
+```
+
+```{r}
+df <- subset(df,chromosomes %in% c("5"))
+pheno_1_manhattan_partial <- ggplot(df, aes(x=SNPs, y=neg_log_ps)) + geom_point(alpha=0.8, size=2, color="yellow4") + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P values for Phenotype 1, Chromosome 5") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
+
+
+```
+
+```{r fig.height = 4, fig.width=10}
+
+pheno_1_manhattans <- ggarrange(pheno_1_manhattan_full, pheno_1_manhattan_partial,
+                    labels = c("1", "2"),
+                    ncol = 2, nrow = 1)
+
+pheno_1_manhattans
 ```
 
 
@@ -368,30 +406,62 @@ ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + g
 neg_log_ps <- -log10(p_table_with_chrom_number$pheno_2)
 #chromosomes <- factor(p_table_with_chrom_number$chromosome)
 df <- data.frame(SNPs,neg_log_ps,p_table_with_chrom_number$chromosome)
-ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered Genotype") + ggtitle("Manhattan Plot") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
+pheno_2_manhattan_full <- ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P values for Phenotype 2") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
 
+```
+
+```{r}
+df <- subset(df,chromosomes %in% c("6"))
+pheno_2_manhattan_partial <- ggplot(df, aes(x=SNPs, y=neg_log_ps)) + geom_point(alpha=0.8, size=2, color="darkolivegreen4") + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P values for Phenotype 2, Chromosome 6") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
+```
+
+```{r fig.height = 4, fig.width=10}
+
+pheno_2_manhattans <- ggarrange(pheno_2_manhattan_full, pheno_2_manhattan_partial,
+                    labels = c("1", "2"),
+                    ncol = 2, nrow = 1)
+
+pheno_2_manhattans
 ```
 
 
 ```{r}
-
 neg_log_ps <- -log10(p_table_with_chrom_number$pheno_3)
 #chromosomes <- factor(p_table_with_chrom_number$chromosome)
 df <- data.frame(SNPs,neg_log_ps,p_table_with_chrom_number$chromosome)
-ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered Genotype") + ggtitle("Manhattan Plot") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
+pheno_3_manhattan_full <- ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P Values for Phenotype 3") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
 
+```
+
+
+
+```{r}
+df <- subset(df,chromosomes %in% c("16"))
+pheno_2_manhattan_partial <- ggplot(df, aes(x=SNPs, y=neg_log_ps)) + geom_point(alpha=0.8, size=2, color="lightslateblue") + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P values for Phenotype 2, Chromosome 16") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
+```
+
+```{r fig.height = 4, fig.width=10}
+
+pheno_3_manhattans <- ggarrange(pheno_3_manhattan_full, pheno_2_manhattan_partial,
+                    labels = c("1", "2"),
+                    ncol = 2, nrow = 1)
+
+pheno_3_manhattans
 ```
 
 ```{r}
 which(p_value_table[1,] == min(p_value_table[1,]))
 
+###second lowest, chrom 11,7.866467e-06 - not above cutoff
+
 ```
+
 ```{r}
-> column_names[16784]
+column_names[16784]
 #[1] "rs7726445"
-> column_names[16786]
+column_names[16786]
 #[1] "rs7731592"
-> column_names[16791]
+column_names[16791]
 #[1] "rs2161548"
 ```
 
@@ -413,16 +483,56 @@ dat_for_new_pheno_1
 ```
 
 ```{r}
+MLE_Beta_calc <- function(pheno_input, xa_input, xd_input){
+    n_samples <- length(xa_input)
+    
+    X_mx <- cbind(1,xa_input,xd_input)
+    
+    MLE_beta <- ginv(t(X_mx) %*% X_mx) %*% t(X_mx) %*% pheno_input
+    return(MLE_beta)
+}
+```
+
+```{r}
+MLE_Beta <- MLE_Beta_calc(phenotypes_table[,1], Xa_matrix[,16784], Xd_matrix[,16784])
+
+MLE_Beta
+
+#         [,1]
+#[1,] 0.1990255
+#[2,] 1.2006214
+#[3,] 0.0146674
+
+#down regulation of pheno 3 for -1, up reg 1 --  Xa
+sum(Xa_matrix[,16784] == -1)
+sum(Xa_matrix[,16784] == 0)
+sum(Xa_matrix[,16784] == 1)
+
+#>  sum(Xa_matrix[,16784] == -1)
+#[1] 115
+#> sum(Xa_matrix[,16784] == 0)
+#[1] 171
+#> sum(Xa_matrix[,16784] == 1)
+#[1] 58
+#> 
+
+```
+
+```{r}
 which(p_value_table[2,] == min(p_value_table[2,]))
+
+which(p_value_table[2,] == min(p_value_table[2,1:15000])) 
+##13371 4.021951e-07, below cutoff
 ```
 
 ```{r}
 column_names[19286]
 column_names[19288]
+column_names[13371]
 ```
 
 ```{r}
-new_pheno_2_most_sig <- c("rs1129187", "rs10948061")
+new_pheno_2_most_sig <- c("rs1129187", "rs10948061","rs6854915")
 
 new_pheno_2_ids <- getENSG(new_pheno_2_most_sig, mart.snp)[,2];
 
@@ -439,7 +549,31 @@ dat_for_new_pheno_2
 ```
 
 ```{r}
+MLE_Beta <- MLE_Beta_calc(phenotypes_table[,2], Xa_matrix[,19286], Xd_matrix[,19286])
+
+MLE_Beta
+
+#             [,1]
+#[1,]  0.079386960
+#[2,]  1.186400898
+#[3,] -0.002189372
+
+#down regulation of pheno 3 for -1, up reg 1 --  Xa
+sum(Xa_matrix[,19286] == -1)
+sum(Xa_matrix[,19286] == 0)
+sum(Xa_matrix[,19286] == 1)
+
+#[1] 95
+#[1] 177
+#[1] 72
+
+```
+
+```{r}
 which(p_value_table[3,] == min(p_value_table[3,]))
+
+#which(p_value_table[3,] == min(p_value_table[3,1:10000])) 
+##chrom 2 lowest p_value == 2.9E-06, above BF cutoff
 ```
 
 
@@ -463,5 +597,29 @@ dat_for_new_pheno_3 = getBM(
 
 new_pheno_3_ids
 dat_for_new_pheno_3
+
+```
+
+Determine if genes were up or down regulated
+```{r}
+
+MLE_Beta <- MLE_Beta_calc(phenotypes_table[,3], Xa_matrix[,41944], Xd_matrix[,41944])
+
+#           [,1]
+#[1,] 0.73742157
+#[2,] 1.13036073
+#[3,] 0.06259936
+
+#down regulation of pheno 3 for -1, up reg 1 --  Xa
+sum(Xa_matrix[,41944] == -1)
+sum(Xa_matrix[,41944] == 0)
+sum(Xa_matrix[,41944] == 1)
+
+#> sum(Xa_matrix[,41944] == -1)
+#[1] 232
+#> sum(Xa_matrix[,41944] == 0)
+#[1] 96
+#> sum(Xa_matrix[,41944] == 1)
+#[1] 16
 
 ```
