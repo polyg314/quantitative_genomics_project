@@ -9,9 +9,9 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-####Part 1: Setup libraries and data
+####2.1 Setup libraries and data
 
-######1a. Include libraries
+######2.1.1 Include libraries
 
 ```{r}
 library(MASS) ## needed for p-val calculations, ginv() function 
@@ -22,7 +22,7 @@ theme_set(theme_pubr()) ## theme for combining plots, from ggpubr
 library(biomaRt) ## needed for Gene lookup on Ensembl database from SNPs 
 ```
 
-######1b. Import and format genotype and phenotype data  
+######2.1.2 Import and format genotype and phenotype data  
 
 ```{r}
 phenotypes_table <- read.csv("data_files/phenotypes.csv", 
@@ -43,7 +43,7 @@ Xa_matrix <- genotypes_table - 1;
 Xd_matrix <- 1 - 2*abs(Xa_matrix)
 ```
 
-######1c. Also include key variables 
+######2.1.3 Also include key variables 
 ```{r}
 N_SNPs <- ncol(genotypes_table) ## Get number of SNPs
 sample_size <- nrow(genotypes_table) ## Get sample size 
@@ -51,9 +51,9 @@ BF_correction_value <- 0.05/N_SNPs #1e-06
 column_names <- colnames(genotypes_table) ## store names of SNPs 
 ```
 
-####Part 2: Obtain P-values for genotypes under normal linear regression
+####2.2 Obtain P-values for genotypes under normal linear regression
 
-######2a. P-value calculator function
+######2.2.1 P-value calculator function
 
 ```{r}
 pval_calculator <- function(pheno_input, xa_input, xd_input){
@@ -73,7 +73,7 @@ pval_calculator <- function(pheno_input, xa_input, xd_input){
 }
 ```
 
-######2b. Store values in table 
+######2.2.2 Store values in table 
 
 ```{r}
 p_value_table <- matrix(, nrow = ncol(phenotypes_table), ncol = N_SNPs)
@@ -87,9 +87,9 @@ for(pheno_col in 1:ncol(phenotypes_table)){
 }
 ```
 
-####Part 3. PCA plots for genotype data given potential covariates
+####2.3 PCA plots for genotype data given potential covariates
 
-######3a. Sex 
+######2.3.1 Sex 
 
 ```{r}
 pca_matrix <- genotypes_table
@@ -98,7 +98,7 @@ colnames(pca_matrix)[ncol(genotypes_table) + 1] <- "Sex"
 autoplot(prcomp(genotypes_table), data = pca_matrix, colour = "Sex")
 ```
 
-######3b. Population 
+######2.3.2 Population 
 
 ```{r}
 pca_matrix[,ncol(genotypes_table) + 2] <- covars$Population
@@ -106,9 +106,9 @@ colnames(pca_matrix)[ncol(genotypes_table) + 2] <- "Population"
 autoplot(prcomp(genotypes_table), data = pca_matrix, colour = 'Population')
 ```
 
-####Part 4. Obtain P-values for genotypes under normal linear regression with inclusion of population covariate
+####2.4 Obtain P-values for genotypes under normal linear regression with inclusion of population covariate
 
-######4a. P-value with covariate function 
+######2.4.1 P-value with covariate function 
 	
 ```{r}
 ##First, convert string values for population into integer values
@@ -160,7 +160,7 @@ pval_calculator_covar <- function(xa_input, pheno_input, z_input){
 }
 ```
 
-######4b. Get and store values in table
+######2.4.2 Get and store values in table
 
 ```{r}
 
@@ -174,9 +174,9 @@ for(pheno_col in 1:ncol(phenotypes_table)){
 
 ```
 
-####Part 5. Compare P-values obtained with and without population covariate inclusion 
+####2.5 Compare P-values obtained with and without population covariate inclusion 
 
-######5a. Totals of significant values
+######2.5.1 Totals of significant values
 
 ```{r}
 p_sig_no_cov_sums <- c(
@@ -196,7 +196,7 @@ p_sig_no_cov_sums
 p_sig_with_cov_sums
 ```
 
-######5b. QQ plots 
+######2.5.2 QQ plots 
 
 ```{r}
 ## Create qq plot funciton 
@@ -247,9 +247,9 @@ qq_plots_with_cov <- ggarrange(qq_1_cov, qq_2_cov, qq_3_cov, qq_4_cov, qq_5_cov,
 qq_plots_with_cov
 ```
 
-####Part 6. Identify causal SNPs versus SNPs that are significant due to linkage disequilibrium 
+####2.6 Identify causal SNPs versus SNPs that are significant due to linkage disequilibrium 
 
-######6a. Manhattan plots 
+######2.6.1 Manhattan plots 
 
 ```{r}
 p_table_with_chrom_number <- data.frame(chromosome = SNP_info$chromosome, pheno_1 = p_value_table[1,], pheno_2 = p_value_table[2,], pheno_3 = p_value_table[3,])
@@ -313,7 +313,7 @@ pheno_3_manhattans <- ggarrange(pheno_3_manhattan_full, pheno_2_manhattan_partia
 pheno_3_manhattans
 ```
 
-######6b. Identification of peak values 
+######2.6.2 Identification of peak values 
 
 ```{r}
 which(p_value_table[1,] == min(p_value_table[1,]))
@@ -357,9 +357,9 @@ column_names[41942]
 column_names[41944]
 ```
 
-####Part 7. Identification of SNP effect on genotype and corresponding genes
+####2.7 Identification of SNP effect on genotype and corresponding genes
 
-######7a. MLE
+######2.7.1 MLE
 
 ```{r}
 MLE_Beta_calc <- function(pheno_input, xa_input, xd_input){
@@ -447,9 +447,11 @@ sum(Xa_matrix[,41944] == 1)
 ```
 
 
-######7b. Biomart / Ensembl database lookup 
+######2.7.2 Biomart / Ensembl database lookup 
 
 ```{r}
+mart.snp <- useMart(biomart = "ENSEMBL_MART_SNP", dataset="hsapiens_snp", host = "www.ensembl.org", ensemblRedirect = FALSE)
+
 mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host = "www.ensembl.org")
 
 getENSG <- function(rs, mart = mart.snp) {
