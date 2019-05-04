@@ -28,61 +28,19 @@ Get number of SNPs
 ```{r}
 N_SNPs <- ncol(genotypes_table)
 ```
-Get minor alleles in genetype table
+Get sample size 
 ```{r}
-
 sample_size <- nrow(genotypes_table)
-
-MAs <- c()  #keep track of minor alleles
-MAFs <- c()  #keep track of minor allele frequencies 
-
-for (i in 1:N_SNPs) {
-    F_0 <- sum(genotypes_table[, i] == 0)
-    F_1 <- sum(genotypes_table[, i] == 1)
-    F_2 <- sum(genotypes_table[, i] == 2)
-    if (F_0 < F_2) {
-        MAFs <- c(MAFs, (F_0 * 2 + F_1)/(sample_size * 2))  #2 for homozygotes, 1 for heterozygotes
-        MAs <- c(MAs, F_0)
-    } else {
-        MAFs <- c(MAFs, (F_2 * 2 + F_1)/(sample_size * 2))  #2 for homozygotes, 1 for heterozygotes
-        MAs <- c(MAs, F_2)
-    }
-}
-
-```
-
-Create Xa and Xd matrices 
-
-```{r}
-Xa_matrix <- matrix(, nrow = sample_size, ncol = N_SNPs) 
-Xd_matrix <- matrix(, nrow = sample_size, ncol = N_SNPs)
-
-for(col in 1:ncol(genotypes_table)) {
-  minor_SNP <- MAs[col]
-  for(row in 1:sample_size) { 
-    current_allele <- genotypes_table[row, col]
-    ##A2A2
-    if (current_allele == minor_SNP){ 
-      Xa_matrix[row,col] <- 1 
-      Xd_matrix[row,col] <- -1
-    }
-    #A1A2
-    else if (current_allele == 1){
-      Xa_matrix[row,col] <- 0
-      Xd_matrix[row,col] <- 1
-    }
-    #A1A1
-    else{
-      Xa_matrix[row,col] <- -1
-      Xd_matrix[row,col] <- -1
-    } 
-  }
-}
 ```
 
 ```{r}
-write.csv(Xa_matrix, file = "Xa_matrix.csv")
-write.csv(Xd_matrix, file = "Xd_matrix.csv")
+Xa_matrix <- genotypes_table - 1;
+Xd_matrix <- 1 - 2*abs(Xa_matrix)
+```
+
+```{r}
+#write.csv(Xa_matrix, file = "Xa_matrix.csv")
+#write.csv(Xd_matrix, file = "Xd_matrix.csv")
 
 ```
 
@@ -129,7 +87,7 @@ for(pheno_col in 1:ncol(phenotypes_table)){
 ```
 
 ```{r}
-write.csv(p_value_table, file = "p_value_table.csv")
+#write.csv(p_value_table, file = "p_value_table.csv")
 ```
 
 ```{r}
@@ -160,7 +118,7 @@ autoplot(prcomp(genotypes_table), data = pca_matrix, colour = "Sex")
 
 
 ```{r}
-autoplot(prcomp(Xa_matrix), data = pca_matrix, colour = "Population")
+#autoplot(prcomp(Xa_matrix), data = pca_matrix, colour = "Population")
 
 ```
 
@@ -250,7 +208,7 @@ qq_5 <- create_qq(p_value_table[5,]) + labs(y = "", x = "")
 
 ```
 
-```{r fig1, fig.height = 1, fig.width=5}
+```{r fig.height = 1, fig.width=5}
 library(ggpubr)
 theme_set(theme_pubr())
 
@@ -271,7 +229,7 @@ qq_4_cov <- create_qq(p_value_cov_table[4,]) + labs(y = "", x = "")
 qq_5_cov <- create_qq(p_value_cov_table[5,]) + labs(y = "", x = "")
 ```
 
-```{r fig1, fig.height = 1, fig.width=5}
+```{r fig.height = 1, fig.width=5}
 
 qq_plots_with_cov <- ggarrange(qq_1_cov, qq_2_cov, qq_3_cov, qq_4_cov, qq_5_cov,
                     labels = c("1", "2", "3", "4", "5"),
@@ -281,6 +239,97 @@ qq_plots_with_cov
 ```
 
 ```{r}
+BF_correction_value <- 0.05/N_SNPs #1e-06
 
+column_names <- colnames(genotypes_table)
+
+pheno_1_most_sig <- c()
+
+for(col in 1:ncol(p_value_table)){
+  if(p_value_table[1,col] < BF_correction_value){
+    pheno_1_most_sig <- c(pheno_1_most_sig, column_names[col])
+  }
+}
+
+pheno_2_most_sig <- c()
+
+for(col in 1:ncol(p_value_table)){
+  if(p_value_table[2,col] < BF_correction_value){
+    pheno_2_most_sig <- c(pheno_2_most_sig, column_names[col])
+  }
+}
+
+pheno_2_most_sig
+
+pheno_3_most_sig <- c()
+
+for(col in 1:ncol(p_value_table)){
+  if(p_value_table[3,col] < BF_correction_value){
+    pheno_3_most_sig <- c(pheno_3_most_sig, column_names[col])
+  }
+}
+
+pheno_3_most_sig
+
+```
+
+
+```{r}
+
+library(biomaRt)
+mart.snp <- useMart(biomart = "ENSEMBL_MART_SNP", dataset="hsapiens_snp", host = "www.ensembl.org", ensemblRedirect = FALSE)
+
+getENSG <- function(rs, mart = mart.snp) {
+  results <- getBM(attributes = c("refsnp_id", "ensembl_gene_stable_id"),
+                   filters    = "snp_filter", values = rs, mart = mart)
+  #print(results)
+  return(results)
+}
+
+pheno_2_ids <- getENSG(pheno_2_most_sig, mart.snp)[,2];
+
+mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host = "www.ensembl.org")
+
+dat_for_pheno_2 = getBM(
+  values = c(pheno_2_ids),
+  filters = c("ensembl_gene_id"),
+  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
+  mart = mart
+)
+
+pheno_2_ids
+dat_for_pheno_2
+```
+
+
+```{r}
+pheno_3_ids <- getENSG(pheno_3_most_sig, mart.snp)[,2];
+
+dat_for_pheno_3 = getBM(
+  values = c(pheno_3_ids),
+  filters = c("ensembl_gene_id"),
+  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
+  mart = mart
+)
+
+pheno_3_ids
+dat_for_pheno_3
+
+```
+
+
+
+```{r}
+pheno_1_ids <- getENSG(pheno_1_most_sig, mart.snp)[,2];
+
+dat_for_pheno_1 = getBM(
+  values = c(pheno_1_ids),
+  filters = c("ensembl_gene_id"),
+  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
+  mart = mart
+)
+
+pheno_1_ids
+dat_for_pheno_1
 
 ```
