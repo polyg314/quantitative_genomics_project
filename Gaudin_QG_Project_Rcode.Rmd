@@ -1,7 +1,7 @@
 ---
 title: "Gaudin_QG_Project_Rcode"
 author: "Paul Gaudin"
-date: "4/30/2019"
+date: "05/04/2019"
 output: html_document
 ---
 
@@ -9,71 +9,73 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+####Part 1: Setup libraries and data
 
-######Import phenotypes and genotypes into tables
+######1a. Include libraries
+
+```{r}
+library(MASS) ## needed for p-val calculations, ginv() function 
+library(ggplot2) ## needed for plots
+library(ggfortify) ## needed for PCA plots
+library(ggpubr) ## needed to format multiple plots within single figure
+theme_set(theme_pubr()) ## theme for combining plots, from ggpubr 
+library(biomaRt) ## needed for Gene lookup on Ensembl database from SNPs 
+```
+
+######1b. Import and format genotype and phenotype data  
+
 ```{r}
 phenotypes_table <- read.csv("data_files/phenotypes.csv", 
     header = TRUE, row.names = 1)
 
 genotypes_table <- read.csv("data_files/genotypes.csv", 
     header = TRUE, row.names = 1)
+
+covars <- read.csv("data_files/covars.csv", 
+    header = TRUE, row.names = 1)
+
+SNP_info <- read.csv("data_files/SNP_info.csv", 
+    header = TRUE)
 ````
-
-Check if rownames match 
-```{r}
-#rownames(phenotypes_table) == rownames(genotypes_table)
-```
-
-Get number of SNPs
-```{r}
-N_SNPs <- ncol(genotypes_table)
-```
-Get sample size 
-```{r}
-sample_size <- nrow(genotypes_table)
-```
 
 ```{r}
 Xa_matrix <- genotypes_table - 1;
 Xd_matrix <- 1 - 2*abs(Xa_matrix)
 ```
 
+######1c. Also include key variables 
 ```{r}
-#write.csv(Xa_matrix, file = "Xa_matrix.csv")
-#write.csv(Xd_matrix, file = "Xd_matrix.csv")
-
+N_SNPs <- ncol(genotypes_table) ## Get number of SNPs
+sample_size <- nrow(genotypes_table) ## Get sample size 
+BF_correction_value <- 0.05/N_SNPs #1e-06
+column_names <- colnames(genotypes_table) ## store names of SNPs 
 ```
 
+####Part 2: Obtain P-values for genotypes under normal linear regression
 
+######2a. P-value calculator function
 
 ```{r}
 pval_calculator <- function(pheno_input, xa_input, xd_input){
     n_samples <- length(xa_input)
-    
     X_mx <- cbind(1,xa_input,xd_input)
-    
     MLE_beta <- ginv(t(X_mx) %*% X_mx) %*% t(X_mx) %*% pheno_input
     y_hat <- X_mx %*% MLE_beta
-  
     SSM <- sum((y_hat - mean(pheno_input))^2)
     SSE <- sum((pheno_input - y_hat)^2)
-  
     df_M <- 2
     df_E <- n_samples - 3 
-  
     MSM <- SSM / df_M
     MSE <- SSE / df_E
-    
     Fstatistic <- MSM / MSE
-  
     pval <- pf(Fstatistic, df_M, df_E,lower.tail = FALSE)
-    
     return(pval)
 }
 ```
 
+######2b. Store values in table 
+
 ```{r}
-library(MASS)
 p_value_table <- matrix(, nrow = ncol(phenotypes_table), ncol = N_SNPs)
 
 for(pheno_col in 1:ncol(phenotypes_table)){
@@ -83,53 +85,40 @@ for(pheno_col in 1:ncol(phenotypes_table)){
   }
   p_value_table[pheno_col,] <- pvals
 }
-
 ```
 
-```{r}
-#write.csv(p_value_table, file = "p_value_table.csv")
-```
+####Part 3. PCA plots for genotype data given potential covariates
+
+######3a. Sex 
 
 ```{r}
-
-library(ggplot2)
-
-library(ggfortify)
-
-pca_matrix <- read.csv("data_files/genotypes.csv", 
-    header = TRUE, row.names = 1)
-
-covars <- read.csv("data_files/covars.csv", 
-    header = TRUE, row.names = 1)
-
-```
-
-```{r}
-pca_matrix[,ncol(genotypes_table) + 1] <- covars$Population
-colnames(pca_matrix)[ncol(genotypes_table) + 1] <- "Population"
-autoplot(prcomp(genotypes_table), data = pca_matrix, colour = 'Population')
-```
-
-```{r}
-pca_matrix[,ncol(genotypes_table) + 2] <- covars$Sex
-colnames(pca_matrix)[ncol(genotypes_table) + 2] <- "Sex"
+pca_matrix <- genotypes_table
+pca_matrix[,ncol(genotypes_table) + 1] <- covars$Sex
+colnames(pca_matrix)[ncol(genotypes_table) + 1] <- "Sex"
 autoplot(prcomp(genotypes_table), data = pca_matrix, colour = "Sex")
 ```
 
+######3b. Population 
 
 ```{r}
-#autoplot(prcomp(Xa_matrix), data = pca_matrix, colour = "Population")
-
+pca_matrix[,ncol(genotypes_table) + 2] <- covars$Population
+colnames(pca_matrix)[ncol(genotypes_table) + 2] <- "Population"
+autoplot(prcomp(genotypes_table), data = pca_matrix, colour = 'Population')
 ```
 
-TSI = -1
-CEU = 0
-GBR = 1
-FIN = 2
+####Part 4. Obtain P-values for genotypes under normal linear regression with inclusion of population covariate
 
+######4a. P-value with covariate function 
+	
 ```{r}
+##First, convert string values for population into integer values
 
 covar_pheno_vals <- rep(0,length(covars$Population))
+
+#TSI = -1
+#CEU = 0
+#GBR = 1
+#FIN = 2
 
 for(i in 1:length(covars$Population)){
   if(covars$Population[i] =="TSI"){
@@ -148,8 +137,9 @@ for(i in 1:length(covars$Population)){
 
 ```
 
-
 ```{r}
+## Create similar p_val calculator function, with covariate (z) inclusion
+
 pval_calculator_covar <- function(xa_input, pheno_input, z_input){ 
   xa_input <- xa_input - 1
   xd_input <- 1 - 2*abs(xa_input)
@@ -170,22 +160,46 @@ pval_calculator_covar <- function(xa_input, pheno_input, z_input){
 }
 ```
 
+######4b. Get and store values in table
+
 ```{r}
-library(MASS)
+
 p_value_cov_table <- matrix(, nrow = ncol(phenotypes_table), ncol = N_SNPs)
 
 for(pheno_col in 1:ncol(phenotypes_table)){
-  #print(pheno_col)
-  #pvals <- rep(0,ncol(Xa_matrix))
   for(i in 1:ncol(Xa_matrix)){
     p_value_cov_table[pheno_col,i] <- pval_calculator_covar(Xa_matrix[,i], phenotypes_table[,pheno_col], covar_pheno_vals)
   }
-  #p_value_cov_table[pheno_col,] <- pvals
 }
 
 ```
 
+####Part 5. Compare P-values obtained with and without population covariate inclusion 
+
+######5a. Totals of significant values
+
 ```{r}
+p_sig_no_cov_sums <- c(
+sum(p_value_table[1,] < BF_correction_value), sum(p_value_table[2,] < BF_correction_value),
+sum(p_value_table[3,] < BF_correction_value),
+sum(p_value_table[4,] < BF_correction_value),
+sum(p_value_table[5,] < BF_correction_value))
+
+p_sig_with_cov_sums <-c(
+sum(p_value_cov_table[1,] < BF_correction_value),
+sum(p_value_cov_table[2,] < BF_correction_value),
+sum(p_value_cov_table[3,] < BF_correction_value),
+sum(p_value_cov_table[4,] < BF_correction_value),
+sum(p_value_cov_table[5,] < BF_correction_value))
+
+p_sig_no_cov_sums
+p_sig_with_cov_sums
+```
+
+######5b. QQ plots 
+
+```{r}
+## Create qq plot funciton 
 create_qq <- function(pvals){
   N = length(pvals)
   log_sorted_pvals = sort(-log10(pvals))
@@ -198,19 +212,15 @@ create_qq <- function(pvals){
 ```
 
 ```{r}
-
 qq_1 <- create_qq(p_value_table[1,]) + labs(y = "Computed -log10(PVals)", x = "")
 qq_2 <- create_qq(p_value_table[2,]) + labs(y = "", x = "")
 qq_3 <- create_qq(p_value_table[3,]) + labs(y = "", x = "Theor. -log10(Pvals)")
 qq_4 <- create_qq(p_value_table[4,]) + labs(y = "", x = "")
 qq_5 <- create_qq(p_value_table[5,]) + labs(y = "", x = "")
-
-
 ```
 
 ```{r fig.height = 2, fig.width=10}
-library(ggpubr)
-theme_set(theme_pubr())
+
 
 qq_plots_no_cov <- ggarrange(qq_1, qq_2, qq_3, qq_4, qq_5,
                     labels = c("1", "2", "3", "4", "5"),
@@ -219,7 +229,6 @@ qq_plots_no_cov <- ggarrange(qq_1, qq_2, qq_3, qq_4, qq_5,
 qq_plots_no_cov
 
 ```
-
 
 ```{r}
 qq_1_cov <- create_qq(p_value_cov_table[1,]) + labs(y = "Computed -log10(PVals)", x = "")
@@ -238,159 +247,29 @@ qq_plots_with_cov <- ggarrange(qq_1_cov, qq_2_cov, qq_3_cov, qq_4_cov, qq_5_cov,
 qq_plots_with_cov
 ```
 
-```{r}
-BF_correction_value <- 0.05/N_SNPs #1e-06
+####Part 6. Identify causal SNPs versus SNPs that are significant due to linkage disequilibrium 
 
-```
-
-```{r}
-sum(p_value_table[1,] < BF_correction_value)
-sum(p_value_table[2,] < BF_correction_value)
-sum(p_value_table[3,] < BF_correction_value)
-sum(p_value_table[4,] < BF_correction_value)
-sum(p_value_table[5,] < BF_correction_value)
-
-```
-
-```{r}
-sum(p_value_cov_table[1,] < BF_correction_value)
-sum(p_value_cov_table[2,] < BF_correction_value)
-sum(p_value_cov_table[3,] < BF_correction_value)
-sum(p_value_cov_table[4,] < BF_correction_value)
-sum(p_value_cov_table[5,] < BF_correction_value)
-```
-
-```{r}
-
-column_names <- colnames(genotypes_table)
-
-pheno_1_most_sig <- c()
-
-for(col in 1:ncol(p_value_table)){
-  if(p_value_table[1,col] < BF_correction_value){
-    pheno_1_most_sig <- c(pheno_1_most_sig, column_names[col])
-  }
-}
-
-pheno_2_most_sig <- c()
-
-for(col in 1:ncol(p_value_table)){
-  if(p_value_table[2,col] < BF_correction_value){
-    pheno_2_most_sig <- c(pheno_2_most_sig, column_names[col])
-  }
-}
-
-pheno_2_most_sig
-
-pheno_3_most_sig <- c()
-
-for(col in 1:ncol(p_value_table)){
-  if(p_value_table[3,col] < BF_correction_value){
-    pheno_3_most_sig <- c(pheno_3_most_sig, column_names[col])
-  }
-}
-
-pheno_3_most_sig
-
-```
-
-
-```{r}
-
-library(biomaRt)
-mart.snp <- useMart(biomart = "ENSEMBL_MART_SNP", dataset="hsapiens_snp", host = "www.ensembl.org", ensemblRedirect = FALSE)
-
-getENSG <- function(rs, mart = mart.snp) {
-  results <- getBM(attributes = c("refsnp_id", "ensembl_gene_stable_id"),
-                   filters    = "snp_filter", values = rs, mart = mart)
-  #print(results)
-  return(results)
-}
-
-pheno_2_ids <- getENSG(pheno_2_most_sig, mart.snp)[,2];
-
-mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host = "www.ensembl.org")
-
-dat_for_pheno_2 = getBM(
-  values = c(pheno_2_ids),
-  filters = c("ensembl_gene_id"),
-  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
-  mart = mart
-)
-
-pheno_2_ids
-dat_for_pheno_2
-```
-
-
-```{r}
-pheno_3_ids <- getENSG(pheno_3_most_sig, mart.snp)[,2];
-
-dat_for_pheno_3 = getBM(
-  values = c(pheno_3_ids),
-  filters = c("ensembl_gene_id"),
-  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
-  mart = mart
-)
-
-pheno_3_ids
-dat_for_pheno_3
-
-```
-
-
-
-```{r}
-pheno_1_ids <- getENSG(pheno_1_most_sig, mart.snp)[,2];
-
-dat_for_pheno_1 = getBM(
-  values = c(pheno_1_ids),
-  filters = c("ensembl_gene_id"),
-  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
-  mart = mart
-)
-
-pheno_1_ids
-dat_for_pheno_1
-
-```
-
-
-```{r}
-SNP_info <- read.csv("data_files/SNP_info.csv", 
-    header = TRUE)
-```
+######6a. Manhattan plots 
 
 ```{r}
 p_table_with_chrom_number <- data.frame(chromosome = SNP_info$chromosome, pheno_1 = p_value_table[1,], pheno_2 = p_value_table[2,], pheno_3 = p_value_table[3,])
-
-#p_table_with_chrom_number$chromosome <- SNP_info$chromosome
-
-#p_table_with_chrom_number$pheno_1 <- p_value_table[1,]
-
-#p_table_with_chrom_number$pheno_2 <- p_value_table[2,]
-
-#p_table_with_chrom_number$pheno_3 <- p_value_table[3,]
 ```
 
 ```{r}
-#library(ggplot2)
 SNPs <- c(1:N_SNPs)
 neg_log_ps <- -log10(p_table_with_chrom_number$pheno_1)
 chromosomes <- factor(p_table_with_chrom_number$chromosome)
 df <- data.frame(SNPs,neg_log_ps,p_table_with_chrom_number$chromosome)
+
 pheno_1_manhattan_full <- ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P values for Phenotype 1") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
-```
 
-```{r}
 df <- subset(df,chromosomes %in% c("5"))
-pheno_1_manhattan_partial <- ggplot(df, aes(x=SNPs, y=neg_log_ps)) + geom_point(alpha=0.8, size=2, color="yellow4") + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P values for Phenotype 1, Chromosome 5") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
 
+pheno_1_manhattan_partial <- ggplot(df, aes(x=SNPs, y=neg_log_ps)) + geom_point(alpha=0.8, size=2, color="yellow4") + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P values for Phenotype 1, Chromosome 5") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
 
 ```
 
 ```{r fig.height = 4, fig.width=10}
-
 pheno_1_manhattans <- ggarrange(pheno_1_manhattan_full, pheno_1_manhattan_partial,
                     labels = c("1", "2"),
                     ncol = 2, nrow = 1)
@@ -398,19 +277,11 @@ pheno_1_manhattans <- ggarrange(pheno_1_manhattan_full, pheno_1_manhattan_partia
 pheno_1_manhattans
 ```
 
-
-
-
 ```{r}
-#SNPs <- c(1:N_SNPs)
 neg_log_ps <- -log10(p_table_with_chrom_number$pheno_2)
-#chromosomes <- factor(p_table_with_chrom_number$chromosome)
 df <- data.frame(SNPs,neg_log_ps,p_table_with_chrom_number$chromosome)
 pheno_2_manhattan_full <- ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P values for Phenotype 2") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
 
-```
-
-```{r}
 df <- subset(df,chromosomes %in% c("6"))
 pheno_2_manhattan_partial <- ggplot(df, aes(x=SNPs, y=neg_log_ps)) + geom_point(alpha=0.8, size=2, color="darkolivegreen4") + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P values for Phenotype 2, Chromosome 6") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
 ```
@@ -424,18 +295,11 @@ pheno_2_manhattans <- ggarrange(pheno_2_manhattan_full, pheno_2_manhattan_partia
 pheno_2_manhattans
 ```
 
-
 ```{r}
 neg_log_ps <- -log10(p_table_with_chrom_number$pheno_3)
-#chromosomes <- factor(p_table_with_chrom_number$chromosome)
 df <- data.frame(SNPs,neg_log_ps,p_table_with_chrom_number$chromosome)
 pheno_3_manhattan_full <- ggplot(df, aes(x=SNPs, y=neg_log_ps, group=chromosomes, colour=chromosomes)) + geom_point(alpha=0.8, size=2) + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P Values for Phenotype 3") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
 
-```
-
-
-
-```{r}
 df <- subset(df,chromosomes %in% c("16"))
 pheno_2_manhattan_partial <- ggplot(df, aes(x=SNPs, y=neg_log_ps)) + geom_point(alpha=0.8, size=2, color="lightslateblue") + ylab("-log10(p-value)") + xlab("Ordered SNP") + ggtitle("Manhattan Plot - P values for Phenotype 2, Chromosome 16") + geom_hline(yintercept=-log10(BF_correction_value), color="red")
 ```
@@ -448,6 +312,8 @@ pheno_3_manhattans <- ggarrange(pheno_3_manhattan_full, pheno_2_manhattan_partia
 
 pheno_3_manhattans
 ```
+
+######6b. Identification of peak values 
 
 ```{r}
 which(p_value_table[1,] == min(p_value_table[1,]))
@@ -466,21 +332,34 @@ column_names[16791]
 ```
 
 ```{r}
-new_pheno_1_most_sig <- c("rs7726445", "rs7731592", "rs2161548")
+which(p_value_table[2,] == min(p_value_table[2,]))
 
-new_pheno_1_ids <- getENSG(new_pheno_1_most_sig, mart.snp)[,2];
-
-dat_for_new_pheno_1 = getBM(
-  values = c(new_pheno_1_ids),
-  filters = c("ensembl_gene_id"),
-  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
-  mart = mart
-)
-
-new_pheno_1_ids
-dat_for_new_pheno_1
-
+which(p_value_table[2,] == min(p_value_table[2,1:15000])) 
+##13371 4.021951e-07, below cutoff
 ```
+
+```{r}
+column_names[19286]
+column_names[19288]
+column_names[13371]
+```
+
+```{r}
+which(p_value_table[3,] == min(p_value_table[3,]))
+
+#which(p_value_table[3,] == min(p_value_table[3,1:10000])) 
+##chrom 2 lowest p_value == 2.9E-06, above BF cutoff
+```
+
+```{r}
+column_names[41938]
+column_names[41942]
+column_names[41944]
+```
+
+####Part 7. Identification of SNP effect on genotype and corresponding genes
+
+######7a. MLE
 
 ```{r}
 MLE_Beta_calc <- function(pheno_input, xa_input, xd_input){
@@ -494,6 +373,8 @@ MLE_Beta_calc <- function(pheno_input, xa_input, xd_input){
 ```
 
 ```{r}
+##pheno 1
+
 MLE_Beta <- MLE_Beta_calc(phenotypes_table[,1], Xa_matrix[,16784], Xd_matrix[,16784])
 
 MLE_Beta
@@ -518,37 +399,9 @@ sum(Xa_matrix[,16784] == 1)
 
 ```
 
-```{r}
-which(p_value_table[2,] == min(p_value_table[2,]))
-
-which(p_value_table[2,] == min(p_value_table[2,1:15000])) 
-##13371 4.021951e-07, below cutoff
-```
 
 ```{r}
-column_names[19286]
-column_names[19288]
-column_names[13371]
-```
-
-```{r}
-new_pheno_2_most_sig <- c("rs1129187", "rs10948061","rs6854915")
-
-new_pheno_2_ids <- getENSG(new_pheno_2_most_sig, mart.snp)[,2];
-
-dat_for_new_pheno_2 = getBM(
-  values = c(new_pheno_2_ids),
-  filters = c("ensembl_gene_id"),
-  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
-  mart = mart
-)
-
-new_pheno_2_ids
-dat_for_new_pheno_2
-
-```
-
-```{r}
+##pheno 2
 MLE_Beta <- MLE_Beta_calc(phenotypes_table[,2], Xa_matrix[,19286], Xd_matrix[,19286])
 
 MLE_Beta
@@ -569,40 +422,9 @@ sum(Xa_matrix[,19286] == 1)
 
 ```
 
-```{r}
-which(p_value_table[3,] == min(p_value_table[3,]))
-
-#which(p_value_table[3,] == min(p_value_table[3,1:10000])) 
-##chrom 2 lowest p_value == 2.9E-06, above BF cutoff
-```
-
 
 ```{r}
-column_names[41938]
-column_names[41942]
-column_names[41944]
-```
-
-```{r}
-new_pheno_3_most_sig <- c("rs11644748", "rs140254902", "rs9652776")
-
-new_pheno_3_ids <- getENSG(new_pheno_3_most_sig, mart.snp)[,2];
-
-dat_for_new_pheno_3 = getBM(
-  values = c(new_pheno_3_ids),
-  filters = c("ensembl_gene_id"),
-  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
-  mart = mart
-)
-
-new_pheno_3_ids
-dat_for_new_pheno_3
-
-```
-
-Determine if genes were up or down regulated
-```{r}
-
+##pheno 3
 MLE_Beta <- MLE_Beta_calc(phenotypes_table[,3], Xa_matrix[,41944], Xd_matrix[,41944])
 
 #           [,1]
@@ -621,5 +443,70 @@ sum(Xa_matrix[,41944] == 1)
 #[1] 96
 #> sum(Xa_matrix[,41944] == 1)
 #[1] 16
+
+```
+
+
+######7b. Biomart / Ensembl database lookup 
+
+```{r}
+mart = useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", host = "www.ensembl.org")
+
+getENSG <- function(rs, mart = mart.snp) {
+  results <- getBM(attributes = c("refsnp_id", "ensembl_gene_stable_id"),
+                   filters    = "snp_filter", values = rs, mart = mart)
+  #print(results)
+  return(results)
+}
+```
+
+```{r}
+new_pheno_1_most_sig <- c("rs7726445", "rs7731592", "rs2161548")
+
+new_pheno_1_ids <- getENSG(new_pheno_1_most_sig, mart.snp)[,2];
+
+dat_for_new_pheno_1 = getBM(
+  values = c(new_pheno_1_ids),
+  filters = c("ensembl_gene_id"),
+  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
+  mart = mart
+)
+
+new_pheno_1_ids
+dat_for_new_pheno_1
+
+```
+
+```{r}
+new_pheno_2_most_sig <- c("rs1129187", "rs10948061","rs6854915")
+
+new_pheno_2_ids <- getENSG(new_pheno_2_most_sig, mart.snp)[,2];
+
+dat_for_new_pheno_2 = getBM(
+  values = c(new_pheno_2_ids),
+  filters = c("ensembl_gene_id"),
+  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
+  mart = mart
+)
+
+new_pheno_2_ids
+dat_for_new_pheno_2
+
+```
+
+```{r}
+new_pheno_3_most_sig <- c("rs11644748", "rs140254902", "rs9652776")
+
+new_pheno_3_ids <- getENSG(new_pheno_3_most_sig, mart.snp)[,2];
+
+dat_for_new_pheno_3 = getBM(
+  values = c(new_pheno_3_ids),
+  filters = c("ensembl_gene_id"),
+  attributes = c("ensembl_gene_id", "external_gene_name", "description"), # what to return
+  mart = mart
+)
+
+new_pheno_3_ids
+dat_for_new_pheno_3
 
 ```
